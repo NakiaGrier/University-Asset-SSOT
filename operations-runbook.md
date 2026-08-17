@@ -1,19 +1,28 @@
-University Asset Management SSOT - Operations Runbook
-Unified Endpoint Reconciliation & Reporting Pipeline Version: 1.0.0 Last Updated: August 2026
+# University Asset Management SSOT - Operations Runbook
+**Unified Endpoint Reconciliation & Reporting Pipeline**
+*Version: 1.0.0*
+*Last Updated: August 2026*
 
-Table of Contents
-Executive Summary & Architecture Overview
-Workspace Directory Structure
-Data Dictionary & Source-to-Target Mapping (STM)
-Staging & Ingestion Layer (Python Engine)
-Reconciliation & Deduplication Engine (SQL Server)
-Semantic Reporting Layer (Power BI View)
-Power BI Dashboard Layout & DAX Measures
-Maintenance, Troubleshooting, and Recovery Playbooks
-1. Executive Summary & Architecture Overview
-This runbook documents the operational architecture and nightly execution pipeline for the University Endpoint Asset Management Single Source of Truth (SSOT). The goal of this system is to combine disparate campus hardware directories—specifically legacy Microsoft System Center Configuration Manager (SCCM) and modern cloud-native Microsoft Intune—into a unified, deduplicated, and audited database schema [2, 14]. This unified data model directly feeds an interactive executive dashboard designed to track cloud migration progress, monitor security compliance, and resolve physical inventory gaps [2, 7].
+---
 
-End-to-End Pipeline Dataflow
+## Table of Contents
+1. [Executive Summary & Architecture Overview](#1-executive-summary--architecture-overview)
+2. [Workspace Directory Structure](#2-workspace-directory-structure)
+3. [Data Dictionary & Source-to-Target Mapping (STM)](#3-data-dictionary--source-to-target-mapping-stm)
+4. [Staging & Ingestion Layer (Python Engine)](#4-staging--ingestion-layer-python-engine)
+5. [Reconciliation & Deduplication Engine (SQL Server)](#5-reconciliation--deduplication-engine-sql-server)
+6. [Semantic Reporting Layer (Power BI View)](#6-reporting-layer--semantic-view)
+7. [Power BI Dashboard Layout & DAX Measures](#7-power-bi-dashboard-layout--dax-measures)
+8. [Maintenance, Troubleshooting, and Recovery Playbooks](#8-maintenance-troubleshooting-and-recovery-playbooks)
+
+---
+
+## 1. Executive Summary & Architecture Overview
+
+This runbook documents the operational architecture and nightly execution pipeline for the **University Endpoint Asset Management Single Source of Truth (SSOT)**. The goal of this system is to combine disparate campus hardware directories—specifically legacy **Microsoft System Center Configuration Manager (SCCM)** and modern cloud-native **Microsoft Intune**—into a unified, deduplicated, and audited database schema [2, 14]. This unified data model directly feeds an interactive executive dashboard designed to track cloud migration progress, monitor security compliance, and resolve physical inventory gaps [2, 7].
+
+### End-to-End Pipeline Dataflow
+```text
 +-----------------------+      +-----------------------+
 |  Raw Intune CSV Feed  |      |   Raw SCCM CSV Feed   |
 | (data/raw/Intune.csv) |      | (data/raw/SCCM.csv)   |
@@ -44,16 +53,22 @@ End-to-End Pipeline Dataflow
                +---------------------------+
                |     Power BI Dashboard    | (Executive & Operational KPIs)
                +---------------------------+
-This pipeline follows the 5-Stage Data Integration Lifecycle [8, 15, 22]:
+```
 
-Profiling & Mapping: Extracting column headers and establishing Source-to-Target mappings [8, 15, 22].
-System Architecture: Setting up local database tables and script hierarchies [15, 22].
-Data Engine & SQL: Building staging schemas, Python load modules, and T-SQL upsert rules [8, 15, 22].
-Testing & Audit: Executing data-quality checks, duplicate rankings, and baseline drift metrics [15, 22].
-Reporting & Operations: Powering Power BI canvas components and maintaining system runbooks [15, 22].
-2. Workspace Directory Structure
+This pipeline follows the **5-Stage Data Integration Lifecycle** [8, 15, 22]:
+1. **Profiling & Mapping:** Extracting column headers and establishing Source-to-Target mappings [8, 15, 22].
+2. **System Architecture:** Setting up local database tables and script hierarchies [15, 22].
+3. **Data Engine & SQL:** Building staging schemas, Python load modules, and T-SQL upsert rules [8, 15, 22].
+4. **Testing & Audit:** Executing data-quality checks, duplicate rankings, and baseline drift metrics [15, 22].
+5. **Reporting & Operations:** Powering Power BI canvas components and maintaining system runbooks [15, 22].
+
+---
+
+## 2. Workspace Directory Structure
+
 To maintain clean code governance and isolate production code from sensitive institutional data, the local project repository is structured as follows [7, 13]:
 
+```text
 University-Asset-SSOT/
 ├── .vscode/                   # Local editor configurations (autopep8 style policies)
 ├── data/                      # Data storage (Blocked from Git tracking via .gitignore)
@@ -70,28 +85,39 @@ University-Asset-SSOT/
 ├── docs/                      # Operations runbooks and user documentation
 ├── .gitignore                 # Active security block file (protects raw files from public repos)
 └── README.md                  # Main developer and repository introduction manual
-3. Data Dictionary & Source-to-Target Mapping (STM)
-The following Source-to-Target Mapping (STM) defines how unmapped columns from our source CSV exports [41] map to our unified dbo.dim_unified_endpoints destination table:
+```
 
-Source File	Source Field	Target SSOT Column	SSOT Data Type	Resolution Strategy / Priority
-Intune.csv	Serial number	ssot_serial_number	VARCHAR(255)	Primary Key Join Indicator. Standardized to uppercase, spaces stripped [41].
-SCCM.csv	Serial Number	ssot_serial_number	VARCHAR(255)	Primary Key Join Indicator. Standardized to uppercase, spaces stripped [41].
-Intune.csv	Device name	ssot_hostname	VARCHAR(255)	COALESCE (Priority 1): Selected first if non-null [41].
-SCCM.csv	Name	ssot_hostname	VARCHAR(255)	COALESCE (Priority 2): Fallback if Intune is null [41].
-Intune.csv	Azure AD Device ID	azure_ad_device_id	VARCHAR(255)	Retained directly from Intune source [41].
-SCCM.csv	Resource ID	sccm_resource_id	INT	Retained directly from SCCM source [41].
-Intune.csv	Manufacturer	hardware_manufacturer	VARCHAR(100)	Retained directly from Intune source [41].
-Intune.csv	Model	hardware_model	VARCHAR(255)	Retained directly from Intune source [41].
-Intune.csv	OS	os_family	VARCHAR(100)	COALESCE (Priority 1): Selected first if non-null [41].
-SCCM.csv	Operating System	os_family	VARCHAR(100)	COALESCE (Priority 2): Fallback if Intune is null [41].
-Intune.csv	OS version	os_build_version	VARCHAR(100)	COALESCE (Priority 1): Selected first if non-null [41].
-SCCM.csv	Operating System Build	os_build_version	VARCHAR(100)	COALESCE (Priority 2): Fallback if Intune is null [41].
-Intune.csv	Primary user email address	primary_user_email	VARCHAR(255)	COALESCE (Priority 1): Selected first if non-null [41].
-SCCM.csv	Primary User(s)	primary_user_email	VARCHAR(255)	COALESCE (Priority 2): Fallback if Intune is null [41].
-Intune.csv	Compliance	compliance_status	VARCHAR(100)	Retained directly from Intune source [41].
-4. Staging & Ingestion Layer (Python Engine)
-We leverage an ELT (Extract, Load, Transform) pattern. The raw file inputs are left unmodified to ensure complete operational auditability. The Python module src/ingestion/load_staging.py runs nightly to pull CSV exports and append them directly to the database staging layer.
+---
 
+## 3. Data Dictionary & Source-to-Target Mapping (STM)
+
+The following Source-to-Target Mapping (STM) defines how unmapped columns from our source CSV exports [41] map to our unified `dbo.dim_unified_endpoints` destination table:
+
+| Source File | Source Field | Target SSOT Column | SSOT Data Type | Resolution Strategy / Priority |
+| :--- | :--- | :--- | :--- | :--- |
+| **Intune.csv** | `Serial number` | `ssot_serial_number` | `VARCHAR(255)` | **Primary Key Join Indicator.** Standardized to uppercase, spaces stripped [41]. |
+| **SCCM.csv** | `Serial Number` | `ssot_serial_number` | `VARCHAR(255)` | **Primary Key Join Indicator.** Standardized to uppercase, spaces stripped [41]. |
+| **Intune.csv** | `Device name` | `ssot_hostname` | `VARCHAR(255)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
+| **SCCM.csv** | `Name` | `ssot_hostname` | `VARCHAR(255)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
+| **Intune.csv** | `Azure AD Device ID` | `azure_ad_device_id` | `VARCHAR(255)` | Retained directly from Intune source [41]. |
+| **SCCM.csv** | `Resource ID` | `sccm_resource_id` | `INT` | Retained directly from SCCM source [41]. |
+| **Intune.csv** | `Manufacturer` | `hardware_manufacturer` | `VARCHAR(100)` | Retained directly from Intune source [41]. |
+| **Intune.csv** | `Model` | `hardware_model` | `VARCHAR(255)` | Retained directly from Intune source [41]. |
+| **Intune.csv** | `OS` | `os_family` | `VARCHAR(100)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
+| **SCCM.csv** | `Operating System` | `os_family` | `VARCHAR(100)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
+| **Intune.csv** | `OS version` | `os_build_version` | `VARCHAR(100)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
+| **SCCM.csv** | `Operating System Build` | `os_build_version` | `VARCHAR(100)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
+| **Intune.csv** | `Primary user email address`| `primary_user_email` | `VARCHAR(255)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
+| **SCCM.csv** | `Primary User(s)` | `primary_user_email` | `VARCHAR(255)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
+| **Intune.csv** | `Compliance` | `compliance_status` | `VARCHAR(100)` | Retained directly from Intune source [41]. |
+
+---
+
+## 4. Staging & Ingestion Layer (Python Engine)
+
+We leverage an **ELT (Extract, Load, Transform)** pattern. The raw file inputs are left unmodified to ensure complete operational auditability. The Python module `src/ingestion/load_staging.py` runs nightly to pull CSV exports and append them directly to the database staging layer.
+
+```python
 # src/ingestion/load_staging.py
 import os
 import sys
@@ -146,21 +172,34 @@ def load_csv_to_staging():
 
 if __name__ == "__main__":
     load_csv_to_staging()
-5. Reconciliation & Deduplication Engine (SQL Server)
-After staging tables are populated, our core transformation is executed via SQL Server using sp_reconcile_endpoints. This stored procedure handles crucial data-cleaning, deduplication, and integration requirements:
+```
 
-Deduplication: We partition the staging datasets by serial number and rank them via a Window Function (ROW_NUMBER()). If duplicate serial entries exist, the newest check-in is selected.
-Defensive Missing Dates: If Last check-in or Last Online Time is null, the sorting engine uses CASE checks to float active records with valid timestamps to the top, utilizing Ingested_At as a deterministic tie-breaker.
-Upsert Operations: We execute a T-SQL MERGE statement. If a record with a matching serial number exists in production, its details are updated. If it is a new device, a new surrogate key and record are created.
+---
+
+## 5. Reconciliation & Deduplication Engine (SQL Server)
+
+After staging tables are populated, our core transformation is executed via SQL Server using **`sp_reconcile_endpoints`**. This stored procedure handles crucial data-cleaning, deduplication, and integration requirements:
+
+1. **Deduplication:** We partition the staging datasets by serial number and rank them via a Window Function (`ROW_NUMBER()`). If duplicate serial entries exist, the newest check-in is selected.
+2. **Defensive Missing Dates:** If `Last check-in` or `Last Online Time` is null, the sorting engine uses `CASE` checks to float active records with valid timestamps to the top, utilizing `Ingested_At` as a deterministic tie-breaker.
+3. **Upsert Operations:** We execute a T-SQL `MERGE` statement. If a record with a matching serial number exists in production, its details are updated. If it is a new device, a new surrogate key and record are created.
+
+```sql
 -- Executing the reconciliation routine
 USE University_Asset_SSOT;
 GO
 
 EXEC dbo.sp_reconcile_endpoints;
 GO
-6. Reporting Layer & Semantic View
-Power BI does not query the physical storage table directly. Instead, we use dbo.vw_powerbi_unified_endpoints as a semantic gateway. This pushes complex, resource-heavy calculations (like string concatenation and nested conditional checks) leftward to the SQL Server database engine.
+```
 
+---
+
+## 6. Reporting Layer & Semantic View
+
+Power BI does not query the physical storage table directly. Instead, we use `dbo.vw_powerbi_unified_endpoints` as a semantic gateway. This pushes complex, resource-heavy calculations (like string concatenation and nested conditional checks) leftward to the SQL Server database engine.
+
+```sql
 USE University_Asset_SSOT;
 GO
 
@@ -193,13 +232,20 @@ SELECT
     [modified_date] AS [last_sync_timestamp]
 FROM dbo.dim_unified_endpoints;
 GO
-7. Power BI Dashboard Layout & DAX Measures
-Power BI Connection Rules
-Connection Mode: Import Mode is utilized to leverage local memory caching, yielding up to a 10x compression ratio on inventory strings and instant on-screen slice actions.
-Credentials: Windows Integrated Authentication (Trusted_Connection=yes) is used to completely eliminate the risk of hardcoding database passwords in our reporting layer.
-Core DAX Calculations
+```
+
+---
+
+## 7. Power BI Dashboard Layout & DAX Measures
+
+### Power BI Connection Rules
+* **Connection Mode:** **Import Mode** is utilized to leverage local memory caching, yielding up to a 10x compression ratio on inventory strings and instant on-screen slice actions.
+* **Credentials:** Windows Integrated Authentication (`Trusted_Connection=yes`) is used to completely eliminate the risk of hardcoding database passwords in our reporting layer.
+
+### Core DAX Calculations
 These formulas must be entered into the Power BI dataset to compute our executive KPIs:
 
+```dax
 Total Endpoints = COUNTROWS('vw_powerbi_unified_endpoints')
 
 Modern Management Rate =
@@ -236,29 +282,40 @@ RETURN
         "Last Sync: Unknown",
         "Last Sync: " & FORMAT(LatestSync, "yyyy-mm-dd hh:nn AM/PM")
     )
-8. Maintenance, Troubleshooting, and Recovery Playbooks
-Playbook A: Troubleshooting Pipeline Ingestion Failure
-Symptom: Python load script crashes with UnicodeEncodeError or ModuleNotFoundError: No module named 'pandas'.
-Resolution Steps:
-Open a terminal in the project directory and verify the package dependencies are fully met:
-pip install pandas openpyxl sqlalchemy pyodbc
-If raw CSV files contain modern UTF-8 accents or emojis, ensure your scripts invoke sys.stdout.reconfigure(encoding='utf-8') to prevent Windows terminal character mapping crashes.
-Verify raw files exist in data/raw/ and are named exactly SCCM.csv and Intune.csv.
-Playbook B: Managing Local SQL Server Instance Connection Gaps
-Symptom: Python throws connection timeout errors or OperationalError: (pyodbc.Error) ('08001'...).
-Resolution Steps:
-Press Win + R, type services.msc, and press Enter. Verify that the SQL Server (SQLEXPRESS) service is running.
-Confirm your server named instance in load_staging.py aligns with your active SQL Server instance:
-Standard SQL Express: localhost\SQLEXPRESS
-Developer Edition / Default: localhost
-Ensure the ODBC Driver is installed. If your workstation lacks ODBC Driver 17 for SQL Server, download it from Microsoft or update your python engine setup to reference Driver 18.
-Playbook C: Resolving Blank or Missing Check-In Times
-Symptom: Duplicate entries are appearing in production or the Power BI dashboard displays unexpected device quantities due to sorting failures on missing check-in dates.
-Resolution Steps:
-Open SSMS and run the validation scripts in Section 5 of this manual.
-Ensure the order of fallback criteria inside the ROW_NUMBER() OVER (...) window function remains active:
-ORDER BY
-    CASE WHEN [Last check-in] IS NOT NULL AND [Last check-in] <> '' THEN 1 ELSE 0 END DESC,
-    [Last check-in] DESC,
-    [Ingested_At] DESC
-This strictly forces empty records to sort last, resolving duplicates using the ingestion order tie-breaker without failing.
+```
+
+---
+
+## 8. Maintenance, Troubleshooting, and Recovery Playbooks
+
+### Playbook A: Troubleshooting Pipeline Ingestion Failure
+* **Symptom:** Python load script crashes with `UnicodeEncodeError` or `ModuleNotFoundError: No module named 'pandas'`.
+* **Resolution Steps:**
+  1. Open a terminal in the project directory and verify the package dependencies are fully met:
+     ```bash
+     pip install pandas openpyxl sqlalchemy pyodbc
+     ```
+  2. If raw CSV files contain modern UTF-8 accents or emojis, ensure your scripts invoke `sys.stdout.reconfigure(encoding='utf-8')` to prevent Windows terminal character mapping crashes.
+  3. Verify raw files exist in `data/raw/` and are named exactly `SCCM.csv` and `Intune.csv`.
+
+### Playbook B: Managing Local SQL Server Instance Connection Gaps
+* **Symptom:** Python throws connection timeout errors or `OperationalError: (pyodbc.Error) ('08001'...)`.
+* **Resolution Steps:**
+  1. Press `Win + R`, type `services.msc`, and press Enter. Verify that the **SQL Server (SQLEXPRESS)** service is running.
+  2. Confirm your server named instance in `load_staging.py` aligns with your active SQL Server instance:
+     * *Standard SQL Express:* `localhost\SQLEXPRESS`
+     * *Developer Edition / Default:* `localhost`
+  3. Ensure the ODBC Driver is installed. If your workstation lacks **ODBC Driver 17 for SQL Server**, download it from Microsoft or update your python engine setup to reference Driver 18.
+
+### Playbook C: Resolving Blank or Missing Check-In Times
+* **Symptom:** Duplicate entries are appearing in production or the Power BI dashboard displays unexpected device quantities due to sorting failures on missing check-in dates.
+* **Resolution Steps:**
+  1. Open SSMS and run the validation scripts in Section 5 of this manual.
+  2. Ensure the order of fallback criteria inside the `ROW_NUMBER() OVER (...)` window function remains active:
+     ```sql
+     ORDER BY
+         CASE WHEN [Last check-in] IS NOT NULL AND [Last check-in] <> '' THEN 1 ELSE 0 END DESC,
+         [Last check-in] DESC,
+         [Ingested_At] DESC
+     ```
+     This strictly forces empty records to sort last, resolving duplicates using the ingestion order tie-breaker without failing.
