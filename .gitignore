@@ -1,0 +1,14 @@
+# Python environment files
+.venv/
+__pycache__/
+*.pyc
+
+# Local configuration files
+.vscode/
+
+# Security boundary: ignore all data folders containing raw CSV/Excel exports
+data/
+*.csv
+*.xlsx
+*.xml
+*.log
