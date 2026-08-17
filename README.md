@@ -1,4 +1,23 @@
-# University Asset SSOT Data Pipeline
+# 🚀 CSU Campus Endpoint Monitoring Single Source of Truth (SSOT)
+
+An enterprise-grade, automated ELT (Extract, Load, Transform) data integration pipeline and interactive compliance dashboard. This project consolidates disparate campus hardware directories—legacy Microsoft SCCM and modern cloud-native Microsoft Intune—into an audited Microsoft SQL Server database, resolving identity conflicts, executing defensive deduplication, and delivering real-time executive analytics.
+
+---
+
+### 📊 Operational & Fleet Integrity Dashboard
+Below is the live operational preview of the reconciled campus fleet, powered directly by our database's semantic view layer:
+
+![CSU Campus Endpoint Monitoring SSOT](images/dashboard_preview.png)
+
+---
+
+### 🔍 Executive & Technical Highlights
+
+*   **Defensive Ingestion Engine:** Automated Python ETL scripts utilizing Pandas and SQLAlchemy to clean character encodings (UTF-8/ANSI) and bulk-load raw CSV files into SQL Server staging tables.
+*   **Immutable Historical Audit Ledger:** A robust T-SQL `MERGE` routine that updates, appends, and deduplicates records without risking destructive data deletions.
+*   **Priority-Based Coalescing:** Smart business logic that matches records across systems by serial number, prioritizing cloud-managed Intune values for hostnames and user emails while retaining legacy SCCM resource connections as operational fallbacks.
+*   **Left-Shifted Analytical View:** A production SQL view (`dbo.vw_powerbi_unified_endpoints`) that computes complex compliance states and unassigned device flags on the database engine, preserving Power BI desktop memory limits and keeping visuals fast.
+*   **Key Performance Indicators (KPIs):** Custom DAX calculations tracking fleet size, modern management rates, patch compliance, and "Ghost Devices" (networked machines missing active user owners).# University Asset SSOT Data Pipeline
 
 A professional-grade, multi-source data integration engine that consolidates campus hardware assets from Microsoft SCCM and Microsoft Intune into a secure, centralized SQL Server database—establishing a Single Source of Truth (SSOT) and powering an interactive Power BI compliance dashboard.
 

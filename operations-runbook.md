@@ -19,7 +19,7 @@
 
 ## 1. Executive Summary & Architecture Overview
 
-This runbook documents the operational architecture and nightly execution pipeline for the **University Endpoint Asset Management Single Source of Truth (SSOT)**. The goal of this system is to combine disparate campus hardware directories—specifically legacy **Microsoft System Center Configuration Manager (SCCM)** and modern cloud-native **Microsoft Intune**—into a unified, deduplicated, and audited database schema [2, 14]. This unified data model directly feeds an interactive executive dashboard designed to track cloud migration progress, monitor security compliance, and resolve physical inventory gaps [2, 7].
+This runbook documents the operational architecture and nightly execution pipeline for the **University Endpoint Asset Management Single Source of Truth (SSOT)**. The goal of this system is to combine disparate campus hardware directories—specifically legacy **Microsoft System Center Configuration Manager (SCCM)** and modern cloud-native **Microsoft Intune**—into a unified, deduplicated, and audited database schema. This unified data model directly feeds an interactive executive dashboard designed to track cloud migration progress, monitor security compliance, and resolve physical inventory gaps.
 
 ### End-to-End Pipeline Dataflow
 ```text
@@ -55,18 +55,18 @@ This runbook documents the operational architecture and nightly execution pipeli
                +---------------------------+
 ```
 
-This pipeline follows the **5-Stage Data Integration Lifecycle** [8, 15, 22]:
-1. **Profiling & Mapping:** Extracting column headers and establishing Source-to-Target mappings [8, 15, 22].
-2. **System Architecture:** Setting up local database tables and script hierarchies [15, 22].
-3. **Data Engine & SQL:** Building staging schemas, Python load modules, and T-SQL upsert rules [8, 15, 22].
-4. **Testing & Audit:** Executing data-quality checks, duplicate rankings, and baseline drift metrics [15, 22].
-5. **Reporting & Operations:** Powering Power BI canvas components and maintaining system runbooks [15, 22].
+This pipeline follows the **5-Stage Data Integration Lifecycle**:
+1. **Profiling & Mapping:** Extracting column headers and establishing Source-to-Target mappings.
+2. **System Architecture:** Setting up local database tables and script hierarchies.
+3. **Data Engine & SQL:** Building staging schemas, Python load modules, and T-SQL upsert rules.
+4. **Testing & Audit:** Executing data-quality checks, duplicate rankings, and baseline drift metrics.
+5. **Reporting & Operations:** Powering Power BI canvas components and maintaining system runbooks.
 
 ---
 
 ## 2. Workspace Directory Structure
 
-To maintain clean code governance and isolate production code from sensitive institutional data, the local project repository is structured as follows [7, 13]:
+To maintain clean code governance and isolate production code from sensitive institutional data, the local project repository is structured as follows:
 
 ```text
 University-Asset-SSOT/
@@ -91,25 +91,25 @@ University-Asset-SSOT/
 
 ## 3. Data Dictionary & Source-to-Target Mapping (STM)
 
-The following Source-to-Target Mapping (STM) defines how unmapped columns from our source CSV exports [41] map to our unified `dbo.dim_unified_endpoints` destination table:
+The following Source-to-Target Mapping (STM) defines how unmapped columns from our source CSV exports map to our unified `dbo.dim_unified_endpoints` destination table:
 
 | Source File | Source Field | Target SSOT Column | SSOT Data Type | Resolution Strategy / Priority |
 | :--- | :--- | :--- | :--- | :--- |
-| **Intune.csv** | `Serial number` | `ssot_serial_number` | `VARCHAR(255)` | **Primary Key Join Indicator.** Standardized to uppercase, spaces stripped [41]. |
-| **SCCM.csv** | `Serial Number` | `ssot_serial_number` | `VARCHAR(255)` | **Primary Key Join Indicator.** Standardized to uppercase, spaces stripped [41]. |
-| **Intune.csv** | `Device name` | `ssot_hostname` | `VARCHAR(255)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
-| **SCCM.csv** | `Name` | `ssot_hostname` | `VARCHAR(255)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
-| **Intune.csv** | `Azure AD Device ID` | `azure_ad_device_id` | `VARCHAR(255)` | Retained directly from Intune source [41]. |
-| **SCCM.csv** | `Resource ID` | `sccm_resource_id` | `INT` | Retained directly from SCCM source [41]. |
-| **Intune.csv** | `Manufacturer` | `hardware_manufacturer` | `VARCHAR(100)` | Retained directly from Intune source [41]. |
-| **Intune.csv** | `Model` | `hardware_model` | `VARCHAR(255)` | Retained directly from Intune source [41]. |
-| **Intune.csv** | `OS` | `os_family` | `VARCHAR(100)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
-| **SCCM.csv** | `Operating System` | `os_family` | `VARCHAR(100)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
-| **Intune.csv** | `OS version` | `os_build_version` | `VARCHAR(100)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
-| **SCCM.csv** | `Operating System Build` | `os_build_version` | `VARCHAR(100)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
-| **Intune.csv** | `Primary user email address`| `primary_user_email` | `VARCHAR(255)` | **COALESCE (Priority 1):** Selected first if non-null [41]. |
-| **SCCM.csv** | `Primary User(s)` | `primary_user_email` | `VARCHAR(255)` | **COALESCE (Priority 2):** Fallback if Intune is null [41]. |
-| **Intune.csv** | `Compliance` | `compliance_status` | `VARCHAR(100)` | Retained directly from Intune source [41]. |
+| **Intune.csv** | `Serial number` | `ssot_serial_number` | `VARCHAR(255)` | **Primary Key Join Indicator.** Standardized to uppercase, spaces stripped. |
+| **SCCM.csv** | `Serial Number` | `ssot_serial_number` | `VARCHAR(255)` | **Primary Key Join Indicator.** Standardized to uppercase, spaces stripped. |
+| **Intune.csv** | `Device name` | `ssot_hostname` | `VARCHAR(255)` | **COALESCE (Priority 1):** Selected first if non-null. |
+| **SCCM.csv** | `Name` | `ssot_hostname` | `VARCHAR(255)` | **COALESCE (Priority 2):** Fallback if Intune is null. |
+| **Intune.csv** | `Azure AD Device ID` | `azure_ad_device_id` | `VARCHAR(255)` | Retained directly from Intune source. |
+| **SCCM.csv** | `Resource ID` | `sccm_resource_id` | `INT` | Retained directly from SCCM source. |
+| **Intune.csv** | `Manufacturer` | `hardware_manufacturer` | `VARCHAR(100)` | Retained directly from Intune source. |
+| **Intune.csv** | `Model` | `hardware_model` | `VARCHAR(255)` | Retained directly from Intune source. |
+| **Intune.csv** | `OS` | `os_family` | `VARCHAR(100)` | **COALESCE (Priority 1):** Selected first if non-null. |
+| **SCCM.csv** | `Operating System` | `os_family` | `VARCHAR(100)` | **COALESCE (Priority 2):** Fallback if Intune is null. |
+| **Intune.csv** | `OS version` | `os_build_version` | `VARCHAR(100)` | **COALESCE (Priority 1):** Selected first if non-null. |
+| **SCCM.csv** | `Operating System Build` | `os_build_version` | `VARCHAR(100)` | **COALESCE (Priority 2):** Fallback if Intune is null. |
+| **Intune.csv** | `Primary user email address`| `primary_user_email` | `VARCHAR(255)` | **COALESCE (Priority 1):** Selected first if non-null. |
+| **SCCM.csv** | `Primary User(s)` | `primary_user_email` | `VARCHAR(255)` | **COALESCE (Priority 2):** Fallback if Intune is null. |
+| **Intune.csv** | `Compliance` | `compliance_status` | `VARCHAR(100)` | Retained directly from Intune source. |
 
 ---
 
