@@ -137,3 +137,6 @@ This repository is strictly designed to enforce **Data Governance & Privacy**:
 * **Zero University Data Leakage:** The `.gitignore` file is hard-coded to ignore the `data/` directory and all raw `*.csv` files, preventing sensitive corporate information (such as hostnames, serial keys, and personal emails) from being uploaded to GitHub.
 * **No Hardcoded Credentials:** The Python database adapter utilizes local **Windows Integrated Security** (`Trusted_Connection=yes`), ensuring that no database passwords or private network configurations are hardcoded into public scripts.
 
+## About Me
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/Nakia-Grier)
